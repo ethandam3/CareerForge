@@ -8,8 +8,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import google.generativeai as genai
+from dotenv import load_dotenv
 import pdfplumber
 import io
+
+# Load environment variables from the .env file in your root directory
+load_dotenv()
 
 app = FastAPI(title="CareerForge API")
 
@@ -23,9 +27,12 @@ app.add_middleware(
 
 DIST_DIR = Path(__file__).parent.parent / "frontend" / "dist"
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY", "AIzaSyCGp9vAaBvvO9sm0I6OpejRRyFul1mrBAc"))
-# Using 2.5-flash as you requested. It is incredibly fast for this use case.
-model = genai.GenerativeModel("gemini-2.5-flash")
+# SECURE: Pulls the key from your .env file instead of hardcoding it
+api_key = os.getenv("GEMINI_API_KEY")
+genai.configure(api_key=api_key)
+
+# Using gemini-2.5-flash for the fastest possible demo performance
+model = genai.GenerativeModel("models/gemini-2.5-flash")
 
 SYSTEM_PREFIX = """You are speaking directly to the candidate. Be specific to their background — reference their actual experience, education, and skills when available. If no resume is provided, give the best advice you can based on whatever background info they shared. The candidate may be applying to ANY industry or career path (tech, healthcare, trades, education, business, etc.). Do not assume tech. Adapt your advice to their specific field. Use bullet points for readability. IMPORTANT: Never output raw markdown bold markers like **text** — just write the text plainly. Use ## for section headers only."""
 
@@ -168,9 +175,9 @@ async def analyze(request: Request):
 
             full_response = ""
             try:
-                # CHANGED: Now using the async method so FastAPI doesn't freeze
+                # Optimized async streaming
                 response = await model.generate_content_async(prompt, stream=True)
-                async for chunk in response: # CHANGED: Async iteration
+                async for chunk in response: 
                     if chunk.text:
                         full_response += chunk.text
                         yield f"data: {json.dumps({'type': 'token', 'stage': stage, 'token': chunk.text})}\n\n"
@@ -225,7 +232,6 @@ Return ONLY valid JSON with this exact structure (no markdown, no code blocks, j
 
 Be realistic with salary data based on current market rates."""
 
-    # CHANGED: Also updated the Data Science route to be async so it is snappy
     response = await model.generate_content_async(prompt)
     response_text = response.text
     try:
@@ -270,4 +276,5 @@ if DIST_DIR.exists():
 if __name__ == "__main__":
     import uvicorn
 
+    # Make sure to pip install python-dotenv before running
     uvicorn.run(app, host="0.0.0.0", port=8080)
